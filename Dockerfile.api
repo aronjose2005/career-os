@@ -1,0 +1,7 @@
+# Backend: the zero-dependency Gemini proxy (careeros-server.js).
+# No npm install needed — it uses only Node's built-in http + global fetch.
+FROM node:20-alpine
+WORKDIR /app
+COPY careeros-server.js .
+EXPOSE 3000
+CMD ["node", "careeros-server.js"]
