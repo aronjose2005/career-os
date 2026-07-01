@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Command, Target, Gauge, Map as MapIcon, GraduationCap, Mic, Repeat, Brain,
   Focus as FocusIcon, Handshake, Briefcase, History, Clock, Flame, FileText,
-  Search, X, Plus, Check, ChevronRight, ArrowRight, ExternalLink, Loader2, Send,
-  Square, Sparkles, TrendingUp, Building2, BookOpen, ShieldAlert, Activity,
+  Search, X, Plus, ArrowRight, Loader2, Send,
+  Square, Sparkles, ShieldAlert, Activity,
   Lightbulb, Bot, User, Settings, CircleDot
 } from "lucide-react";
 
