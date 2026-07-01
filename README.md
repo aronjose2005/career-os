@@ -148,8 +148,12 @@ career-os/
 │   ├── App.jsx           #   Router — Landing ("/") + CareerOS app ("/app")
 │   ├── Landing.jsx       #   Cinematic scroll landing page (GSAP + Lenis)
 │   ├── CareerOS.jsx      #   The main application — all 20 systems
+│   ├── engine.js         #   Pure career-intelligence engine (unit-tested)
+│   ├── test/             #   Engine unit tests (node:test)
 │   └── ...               #   Components, styles, Vite config
 ├── careeros-server.js    # Zero-dependency Node proxy → Google Gemini
+├── test/                 # Server unit + route tests (node:test)
+├── .github/workflows/    # CI — lint, build, and tests on every push/PR
 ├── selfhost-adapter.js   # Browser storage adapter for self-hosted builds
 ├── Dockerfile            # Multi-stage: build React → serve with nginx (web)
 ├── Dockerfile.api        # Node runtime for the proxy (api)
@@ -198,6 +202,26 @@ npm run dev
 ```
 
 The Vite dev server proxies `/api/` to the Node backend on `:3000`, so the AI features work end-to-end in development.
+
+### Tests & quality
+
+The core logic is unit-tested with Node's built-in test runner — **no extra test-framework dependency**:
+
+```bash
+# Lint the React app
+cd web-src && npm run lint
+
+# Run the engine unit tests (25 cases) from web-src
+npm test              # == node --test
+
+# Run everything — server + engine (41 cases) — from the repo root
+node --test
+```
+
+- **`engine.js`** — the pure career-intelligence engine (readiness, gap map, momentum, time-to-offer, calibration) is tested directly, no browser needed.
+- **`careeros-server.js`** — the Gemini proxy exposes pure helpers (`toGeminiContents`, `extractText`) and an injectable request handler, so the message mapping, routes, CORS, and error handling are tested without a live API key.
+
+Every push and pull request runs lint + build + the full suite via GitHub Actions (`.github/workflows/ci.yml`).
 
 ---
 
