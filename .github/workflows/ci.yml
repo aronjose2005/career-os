@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web-src/package-lock.json
+
+      - name: Install web dependencies
+        working-directory: web-src
+        run: npm ci
+
+      - name: Lint
+        working-directory: web-src
+        run: npm run lint
+
+      - name: Build
+        working-directory: web-src
+        run: npm run build
+
+      - name: Run tests (server + engine)
+        run: node --test
