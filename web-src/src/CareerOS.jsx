@@ -359,7 +359,7 @@ export default function CareerOS() {
    COMMAND CENTER (home) — One Thing + Offer Distance + Momentum + Time-to-Offer
    + Career Intelligence Feed + Changelog. No vanity dashboard.
    ============================================================================ */
-function CommandCenter({ c, t, readiness, gap, oneThing, mo, tt, feed, go, commit, ping, setFocusMode }) {
+function CommandCenter({ c, t, readiness, gap, oneThing, mo, tt, feed, go }) {
   const [showAll, setShowAll] = useState(false);
   const topGaps = gap.filter((g) => !g.have).slice(0, 3);
   return (
@@ -424,7 +424,7 @@ function MetricTile({ icon: Icon, v, suffix = "", label, hint, spark, onClick })
 /* ============================================================================
    TARGET — roles as commitments, offer distance, trajectory, role immersion
    ============================================================================ */
-function TargetView({ c, t, readiness, commit, ping, go }) {
+function TargetView({ c, t, commit, ping }) {
   const [adding, setAdding] = useState(false);
   const [f, setF] = useState({ label: "", track: c.profile.track || "AI Engineer", company: "", band: "" });
   const [immersing, setImmersing] = useState(false);
@@ -585,7 +585,7 @@ function MockRoom({ c, t, commit, ping, setFocusMode }) {
   );
 }
 
-function SpacedKnowledge({ c, t, commit, ping, setFocusMode }) {
+function SpacedKnowledge({ c, t, commit, setFocusMode }) {
   const track = TRACKS[t?.track] || TRACKS["AI Engineer"];
   // seed concept cards for the track if none exist for it
   useEffect(() => { const have = new Set(c.learning.map((l) => l.topic)); const missing = track.concepts.filter((x) => !have.has(x)); if (missing.length) commit((n) => { missing.forEach((x) => n.learning.push({ id: uid(), topic: x, track: t?.track, source: "concept", due: todayISO(), ease: 2.3, interval: 0, reps: 0 })); }); }, [t?.track]);
@@ -618,14 +618,14 @@ function ClosedLoop({ c, t, go }) {
   );
 }
 
-function Negotiation({ c, t, commit, ping }) {
+function Negotiation({ t, commit, ping }) {
   const [msgs, setMsgs] = useState([]); const [input, setInput] = useState(""); const [busy, setBusy] = useState(false); const [active, setActive] = useState(false); const [lev, setLev] = useState(50);
   const end = useRef(null); useEffect(() => { end.current && end.current.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
   const sys = `You are a recruiter making a verbal job offer for a ${t?.label || "role"} at ${t?.band || "market"} comp. Role-play a realistic salary negotiation. Push back once or twice, but reward good tactics (anchoring, citing market data, asking for time, negotiating base+ESOP+joining bonus). Keep replies under 90 words. Start by making the offer.`;
   const start = async () => { if (!t) { ping("Set a target first", true); return; } setActive(true); setLev(50); setBusy(true); try { const r = await callClaude([{ role: "user", content: sys }]); setMsgs([{ role: "_sys", content: sys }, { role: "assistant", content: r }]); } catch (e) { ping(e.message, true); } setBusy(false); };
   const strong = /market|levels|glassdoor|base|esop|equity|joining|bonus|time to think|24 hours|competing offer|data|research/i;
   const send = async () => { const m = input.trim(); if (!m || busy) return; setLev((p) => Math.max(5, Math.min(95, p + (strong.test(m) ? 12 : -6)))); const hist = msgs.map((x) => x.role === "_sys" ? { role: "user", content: x.content } : x); const next = [...msgs, { role: "user", content: m }]; setMsgs(next); setInput(""); setBusy(true); try { const r = await callClaude([...hist, { role: "user", content: m }]); setMsgs([...next, { role: "assistant", content: r }]); } catch (e) { ping(e.message, true); } setBusy(false); };
-  const finish = () => { commit((n) => { }, { type: "negotiate", text: `Practiced negotiation for ${t.label} (leverage ${lev})` }); setActive(false); setMsgs([]); ping(`Session logged · final leverage ${lev}/100`); };
+  const finish = () => { commit(() => {}, { type: "negotiate", text: `Practiced negotiation for ${t.label} (leverage ${lev})` }); setActive(false); setMsgs([]); ping(`Session logged · final leverage ${lev}/100`); };
   return (
     <div className="space-y-3">
       {!active ? <Panel className="p-5"><Label>Negotiation dojo</Label><p className="text-sm text-slate-400 mt-2">Practice the money conversation under pressure. A recruiter (AI) makes an offer; your tactics move a live leverage meter. Most people leave lakhs on the table because they never rehearse this. (Needs Gemini key.)</p><Btn variant="primary" className="mt-3" onClick={start} disabled={!t}><Handshake size={15} />Enter the dojo</Btn></Panel> :
@@ -641,7 +641,7 @@ function Negotiation({ c, t, commit, ping }) {
 function ResumeCompiler({ c, t, commit, ping }) {
   const [out, setOut] = useState(""); const [busy, setBusy] = useState(false);
   const ev = c.evidence;
-  const compile = async () => { if (!t) { ping("Set a target first", true); return; } if (!ev.length && !c.profile.resume) { ping("Add evidence or a base resume first", true); return; } setBusy(true); try { const evText = ev.map((e) => `- ${e.title} (${e.type}; skills: ${(e.skills || []).join(", ")})`).join("\n"); const txt = await callClaude([{ role: "user", content: `You are a resume compiler. Build resume bullets for a ${t.label}${t.company ? " at " + t.company : ""} target, using ONLY this evidence — never invent. Flag any role-required skill the candidate has NO evidence for.\nEXPERIENCE: ${c.profile.experience || "early career"}; FOCUS: ${c.profile.focus || t.track}\nBASE RESUME: ${c.profile.resume || "(none)"}\nEVIDENCE:\n${evText || "(none)"}\nROLE NEEDS: ${(TRACKS[t.track] || TRACKS["AI Engineer"]).skills.join(", ")}\nOutput: === HEADLINE === / === SUMMARY (3 lines) === / === EVIDENCE-BACKED BULLETS (5) === / === UNBACKED CLAIMS TO AVOID (skills with no evidence) === / === FASTEST PROOF TO ADD NEXT ===` }]); setOut(txt); commit((n) => { }, { type: "resume", text: `Compiled resume for ${t.label}` }); } catch (e) { ping(e.message, true); } setBusy(false); };
+  const compile = async () => { if (!t) { ping("Set a target first", true); return; } if (!ev.length && !c.profile.resume) { ping("Add evidence or a base resume first", true); return; } setBusy(true); try { const evText = ev.map((e) => `- ${e.title} (${e.type}; skills: ${(e.skills || []).join(", ")})`).join("\n"); const txt = await callClaude([{ role: "user", content: `You are a resume compiler. Build resume bullets for a ${t.label}${t.company ? " at " + t.company : ""} target, using ONLY this evidence — never invent. Flag any role-required skill the candidate has NO evidence for.\nEXPERIENCE: ${c.profile.experience || "early career"}; FOCUS: ${c.profile.focus || t.track}\nBASE RESUME: ${c.profile.resume || "(none)"}\nEVIDENCE:\n${evText || "(none)"}\nROLE NEEDS: ${(TRACKS[t.track] || TRACKS["AI Engineer"]).skills.join(", ")}\nOutput: === HEADLINE === / === SUMMARY (3 lines) === / === EVIDENCE-BACKED BULLETS (5) === / === UNBACKED CLAIMS TO AVOID (skills with no evidence) === / === FASTEST PROOF TO ADD NEXT ===` }]); setOut(txt); commit(() => {}, { type: "resume", text: `Compiled resume for ${t.label}` }); } catch (e) { ping(e.message, true); } setBusy(false); };
   return (
     <Panel className="p-5">
       <div className="flex items-center justify-between"><Label>Resume compiler · it won't let you claim what you can't back</Label><Btn size="sm" variant="primary" onClick={compile} disabled={busy}>{busy ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />}Compile</Btn></div>
@@ -664,7 +664,7 @@ function PursueView({ c, t, commit, ping }) {
   const add = () => { if (!f.company.trim()) return; commit((n) => { n.pursuits.push({ id: uid(), company: f.company, role: f.role, band: f.band, stage: "Researching", warmth: 1, note: "", lastTouch: todayISO() }); }, { type: "apply", text: `Opened pursuit: ${f.company}` }); setAdding(false); setF({ company: "", role: t?.label || "", band: "" }); ping("Pursuit opened"); };
   const move = (id, stage) => { commit((n) => { const p = n.pursuits.find((x) => x.id === id); if (p) { p.stage = stage; p.lastTouch = todayISO(); } }, { type: "apply", text: `${stage}: ${c.pursuits.find((x) => x.id === id)?.company}` }); if (stage === "Lost") setLossFor(id); };
   const intel = async (p) => { setIntelBusy(p.id); try { const txt = await callClaude([{ role: "user", content: `For a candidate interviewing at ${p.company} for ${p.role}: give 3 crisp bullets — (1) what they're known to test in interviews, (2) one recent company development worth mentioning, (3) one smart question to ask them. Be concise.` }], { useSearch: true }); commit((n) => { const x = n.pursuits.find((y) => y.id === p.id); if (x) { x.intel = txt; x.lastTouch = todayISO(); } }); } catch (e) { ping(e.message, true); } setIntelBusy(null); };
-  const warmGen = async () => { if (!warm.company || !warm.name) { ping("Add a contact name + company", true); return; } setWarmBusy(true); try { const txt = await callClaude([{ role: "user", content: `Write a short, warm, non-cringe LinkedIn outreach message (under 80 words) from ${c.profile.name || "a candidate"} (a ${c.profile.experience || "early-career"} ${t?.track || "engineer"}) to ${warm.name}${warm.relation ? " (" + warm.relation + ")" : ""} at ${warm.company}, asking for a referral or a quick chat about ${t?.label || "roles"} there. Specific, humble, easy to say yes to.` }]); setWarmOut(txt); commit((n) => { }, { type: "warm", text: `Drafted warm intro to ${warm.name} @ ${warm.company}` }); } catch (e) { ping(e.message, true); } setWarmBusy(false); };
+  const warmGen = async () => { if (!warm.company || !warm.name) { ping("Add a contact name + company", true); return; } setWarmBusy(true); try { const txt = await callClaude([{ role: "user", content: `Write a short, warm, non-cringe LinkedIn outreach message (under 80 words) from ${c.profile.name || "a candidate"} (a ${c.profile.experience || "early-career"} ${t?.track || "engineer"}) to ${warm.name}${warm.relation ? " (" + warm.relation + ")" : ""} at ${warm.company}, asking for a referral or a quick chat about ${t?.label || "roles"} there. Specific, humble, easy to say yes to.` }]); setWarmOut(txt); commit(() => {}, { type: "warm", text: `Drafted warm intro to ${warm.name} @ ${warm.company}` }); } catch (e) { ping(e.message, true); } setWarmBusy(false); };
   return (
     <div className="tabfade space-y-5">
       <div><Label>Pursue · how do I get the offer?</Label><h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-slate-50 mt-0.5">Pursuits</h1><p className="text-sm text-slate-500 mt-1">Not a saved-jobs list — a personal pipeline. Each company is a relationship you cultivate.</p></div>
@@ -711,7 +711,7 @@ function LossReview({ onClose, onSave }) {
 /* ============================================================================
    COMMAND PALETTE (⌘K)
    ============================================================================ */
-function Palette({ onClose, go, c, startMock }) {
+function Palette({ onClose, go, startMock }) {
   const [q, setQ] = useState("");
   const actions = [
     { label: "Go to Command Center", run: () => go("command"), icon: Command },
