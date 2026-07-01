@@ -29,13 +29,34 @@ function send(res, status, obj) {
 // The app expects responses shaped like { content: [{ type: "text", text: "..." }] }
 const asText = (t) => ({ content: [{ type: "text", text: t }] });
 
-async function callGemini(messages) {
-  // CareerOS sends [{ role: "user" | "assistant", content }]. Gemini wants user/model.
-  const contents = (messages || []).map((m) => ({
+// Map CareerOS messages [{ role:"user"|"assistant", content }] to Gemini's
+// "contents" shape (Gemini uses "model" where CareerOS says "assistant").
+function toGeminiContents(messages) {
+  return (messages || []).map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
     parts: [{ text: String(m.content == null ? "" : m.content) }],
   }));
-  const body = { contents, generationConfig: { temperature: 0.7, maxOutputTokens: 2048 } };
+}
+
+// Pull the reply text out of a Gemini response, throwing a clear reason on an
+// API error, a safety block, or an empty result. Pure: takes the parsed body,
+// whether the HTTP call was ok, and the status code.
+function extractText(data, httpOk, status) {
+  if (!httpOk) {
+    const msg = (data && data.error && data.error.message) || ("HTTP " + status);
+    throw new Error(msg);
+  }
+  const cand = data && data.candidates && data.candidates[0];
+  if (!cand) {
+    const block = data && data.promptFeedback && data.promptFeedback.blockReason;
+    throw new Error(block ? "content blocked (" + block + ")" : "empty response from Gemini");
+  }
+  const text = ((cand.content && cand.content.parts) || []).map((p) => p.text || "").join("");
+  return text || "(empty response)";
+}
+
+async function callGemini(messages) {
+  const body = { contents: toGeminiContents(messages), generationConfig: { temperature: 0.7, maxOutputTokens: 2048 } };
 
   const r = await fetch(ENDPOINT(MODEL), {
     method: "POST",
@@ -43,54 +64,55 @@ async function callGemini(messages) {
     body: JSON.stringify(body),
   });
   const data = await r.json().catch(() => ({}));
-
-  if (!r.ok) {
-    const msg = (data && data.error && data.error.message) || ("HTTP " + r.status);
-    throw new Error(msg);
-  }
-  const cand = data.candidates && data.candidates[0];
-  if (!cand) {
-    const block = data.promptFeedback && data.promptFeedback.blockReason;
-    throw new Error(block ? "content blocked (" + block + ")" : "empty response from Gemini");
-  }
-  const text = ((cand.content && cand.content.parts) || []).map((p) => p.text || "").join("");
-  return text || "(empty response)";
+  return extractText(data, r.ok, r.status);
 }
 
-const server = http.createServer((req, res) => {
-  if (req.method === "OPTIONS") return send(res, 204, {});
-  if (req.method === "GET" && req.url === "/api/health") return send(res, 200, { ok: true, model: MODEL });
+// Build the request handler. `callModel` is injectable so tests can exercise
+// the routes without calling the real Gemini API.
+function createHandler({ callModel = callGemini } = {}) {
+  return function handler(req, res) {
+    if (req.method === "OPTIONS") return send(res, 204, {});
+    if (req.method === "GET" && req.url === "/api/health") return send(res, 200, { ok: true, model: MODEL });
 
-  if (req.method === "POST" && req.url === "/api/claude") {
-    let raw = "";
-    req.on("data", (c) => (raw += c));
-    req.on("end", async () => {
-      try {
-        const { messages } = JSON.parse(raw || "{}");
-        const text = await callGemini(messages);
-        send(res, 200, asText(text));
-      } catch (e) {
-        console.error("⚠️  Gemini error:", e.message);
-        // Surface the real reason INSIDE the app so you can see what's wrong (not an opaque 502).
-        send(res, 200, asText("⚠️ Gemini error: " + e.message +
-          "\n\nFix: check your API key and the MODEL name in careeros-server.js, then retry."));
-      }
-    });
-    return;
-  }
-  send(res, 404, { error: "not found" });
-});
-
-if (API_KEY === "PASTE_YOUR_GEMINI_KEY_HERE") {
-  console.log("\n⚠️  No Gemini key set yet.");
-  console.log("   1) Get a free key (no credit card): https://aistudio.google.com/apikey");
-  console.log("   2) Paste it into API_KEY in this file, OR run:");
-  console.log("      GEMINI_API_KEY=your_key node careeros-server.js\n");
+    if (req.method === "POST" && req.url === "/api/claude") {
+      let raw = "";
+      req.on("data", (c) => (raw += c));
+      req.on("end", async () => {
+        try {
+          const { messages } = JSON.parse(raw || "{}");
+          const text = await callModel(messages);
+          send(res, 200, asText(text));
+        } catch (e) {
+          console.error("⚠️  Gemini error:", e.message);
+          // Surface the real reason INSIDE the app so you can see what's wrong (not an opaque 502).
+          send(res, 200, asText("⚠️ Gemini error: " + e.message +
+            "\n\nFix: check your API key and the MODEL name in careeros-server.js, then retry."));
+        }
+      });
+      return;
+    }
+    send(res, 404, { error: "not found" });
+  };
 }
-server.listen(PORT, () =>
-  console.log(
-    `\n✅ CareerOS backend running on http://localhost:${PORT}  (model: ${MODEL})\n` +
-    `   Leave this terminal open. In another terminal, start the app: npm run dev\n` +
-    `   Then your mocks, Negotiation Dojo, Resume Compiler, and Role Immersion will work.\n`
-  )
-);
+
+const server = http.createServer(createHandler());
+
+module.exports = { createHandler, toGeminiContents, extractText, asText, callGemini, MODEL };
+
+// Only start listening when run directly (node careeros-server.js), so the
+// module can be imported by tests without binding a port.
+if (require.main === module) {
+  if (API_KEY === "PASTE_YOUR_GEMINI_KEY_HERE") {
+    console.log("\n⚠️  No Gemini key set yet.");
+    console.log("   1) Get a free key (no credit card): https://aistudio.google.com/apikey");
+    console.log("   2) Paste it into API_KEY in this file, OR run:");
+    console.log("      GEMINI_API_KEY=your_key node careeros-server.js\n");
+  }
+  server.listen(PORT, () =>
+    console.log(
+      `\n✅ CareerOS backend running on http://localhost:${PORT}  (model: ${MODEL})\n` +
+      `   Leave this terminal open. In another terminal, start the app: npm run dev\n` +
+      `   Then your mocks, Negotiation Dojo, Resume Compiler, and Role Immersion will work.\n`
+    )
+  );
+}
