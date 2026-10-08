@@ -11,6 +11,8 @@ import {
   uid, todayISO, daysBetween, extractJSON, TRACKS, TRACK_NAMES,
   activeTarget, computeReadiness, computeGap, momentum, timeToOffer, calibration,
 } from "./engine.js";
+import { Label, Panel, Btn } from "./ui.jsx";
+import ResumeBuilder from "./ResumeBuilder.jsx";
 
 /* ============================================================================
    CareerOS v3 — The Operating System for Career Growth
@@ -23,10 +25,10 @@ import {
 const KEY = "careeros:v3";
 
 /* ---------- backend ---------- */
-async function callClaude(messages, { useSearch = false } = {}) {
+async function callClaude(messages, { useSearch = false, maxOutputTokens, temperature, json } = {}) {
   const res = await fetch("/api/claude", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, useSearch }),
+    body: JSON.stringify({ messages, useSearch, maxOutputTokens, temperature, json }),
   });
   if (!res.ok) throw new Error("API request failed (" + res.status + ")");
   const data = await res.json();
@@ -93,19 +95,6 @@ function buildFeed(c) {
 /* ============================================================================
    small UI atoms (Linear/Bloomberg-dense; no glass, no particles)
    ============================================================================ */
-const Label = ({ children }) => <div className="font-mono text-[10px] tracking-[0.18em] uppercase text-slate-500">{children}</div>;
-const Panel = ({ children, className = "", accent }) => (
-  <div className={"rounded-lg border bg-white/[0.02] " + (accent ? "border-amber-400/25" : "border-white/10") + " " + className}>{children}</div>
-);
-const Btn = ({ children, onClick, variant = "ghost", className = "", disabled, size = "md" }) => {
-  const base = "btn inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-colors disabled:opacity-40 ";
-  const sz = size === "sm" ? "px-2.5 py-1 text-xs " : "px-3.5 py-2 text-sm ";
-  const v = variant === "primary" ? "bg-amber-400 text-slate-950 hover:bg-amber-300 "
-    : variant === "danger" ? "bg-red-500/15 text-red-300 border border-red-400/30 hover:bg-red-500/25 "
-    : variant === "teal" ? "border border-teal-400/40 text-teal-300 hover:bg-teal-400/10 "
-    : "border border-white/15 text-slate-300 hover:bg-white/5 ";
-  return <button onClick={onClick} disabled={disabled} className={base + sz + v + className}>{children}</button>;
-};
 function useCountUp(target, dur = 800) {
   const [n, setN] = useState(0);
   useEffect(() => { let raf, s; const tick = (t) => { if (!s) s = t; const p = Math.min(1, (t - s) / dur); setN(Math.round(target * p)); if (p < 1) raf = requestAnimationFrame(tick); }; raf = requestAnimationFrame(tick); return () => cancelAnimationFrame(raf); }, [target, dur]);
@@ -447,12 +436,13 @@ function ImproveView({ c, t, sub, commit, ping, go, setFocusMode }) {
   return (
     <div className="tabfade space-y-5">
       <div><Label>Improve · how do I get better?</Label><h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-slate-50 mt-0.5">The training room</h1></div>
-      <div className="flex gap-1.5 flex-wrap">{[["mock", "Mock + Tape"], ["spaced", "Spaced Knowledge"], ["loop", "Closed Loop"], ["negotiate", "Negotiation Dojo"], ["resume", "Resume Compiler"]].map(([k, l]) => <button key={k} onClick={() => go("improve", k)} className={"px-3 py-1.5 rounded-full text-xs border " + (tab === k ? "bg-amber-400/15 border-amber-400/50 text-amber-200" : "border-white/15 text-slate-400 hover:text-slate-200")}>{l}</button>)}</div>
+      <div className="flex gap-1.5 flex-wrap">{[["mock", "Mock + Tape"], ["spaced", "Spaced Knowledge"], ["loop", "Closed Loop"], ["negotiate", "Negotiation Dojo"], ["resume", "Resume Compiler"], ["builder", "Resume Builder"]].map(([k, l]) => <button key={k} onClick={() => go("improve", k)} className={"px-3 py-1.5 rounded-full text-xs border " + (tab === k ? "bg-amber-400/15 border-amber-400/50 text-amber-200" : "border-white/15 text-slate-400 hover:text-slate-200")}>{l}</button>)}</div>
       {tab === "mock" && <MockRoom c={c} t={t} commit={commit} ping={ping} setFocusMode={setFocusMode} />}
       {tab === "spaced" && <SpacedKnowledge c={c} t={t} commit={commit} ping={ping} setFocusMode={setFocusMode} />}
       {tab === "loop" && <ClosedLoop c={c} t={t} go={go} />}
       {tab === "negotiate" && <Negotiation c={c} t={t} commit={commit} ping={ping} />}
       {tab === "resume" && <ResumeCompiler c={c} t={t} commit={commit} ping={ping} />}
+      {tab === "builder" && <ResumeBuilder c={c} t={t} commit={commit} ping={ping} callAI={callClaude} />}
     </div>
   );
 }
@@ -634,6 +624,7 @@ function Palette({ onClose, go, startMock }) {
     { label: "Review due concepts (spaced)", run: () => go("improve", "spaced"), icon: Brain },
     { label: "Enter the Negotiation Dojo", run: () => go("improve", "negotiate"), icon: Handshake },
     { label: "Compile my resume", run: () => go("improve", "resume"), icon: FileText },
+    { label: "Open AI Resume Builder", run: () => go("improve", "builder"), icon: FileText },
     { label: "Open Pursuits", run: () => go("pursue"), icon: Briefcase },
     { label: "See my Closed Loop", run: () => go("improve", "loop"), icon: Repeat },
   ];

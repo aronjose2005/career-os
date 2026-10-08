@@ -2,7 +2,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const http = require("node:http");
-const { createHandler } = require("../careeros-server.js");
+const { createHandler, buildGenConfig } = require("../careeros-server.js");
 
 function startServer(handler) {
   return new Promise((resolve) => {
@@ -60,5 +60,23 @@ test("an unknown route returns 404", async () => {
   const { srv, base } = await startServer(createHandler({ callModel: async () => "x" }));
   try {
     assert.equal((await fetch(base + "/nope")).status, 404);
+  } finally { srv.close(); }
+});
+
+test("buildGenConfig never sends deprecated Gemini 3.x sampling params", () => {
+  assert.deepEqual(buildGenConfig(), { maxOutputTokens: 2048 });
+  const c = buildGenConfig({ maxOutputTokens: 999999, temperature: 0.3, topP: 0.9, topK: 40, candidateCount: 2, json: true });
+  assert.deepEqual(c, { maxOutputTokens: 8192, responseMimeType: "application/json" });
+  for (const k of ["temperature", "topP", "topK", "candidateCount"]) assert.ok(!(k in c));
+  assert.equal(buildGenConfig({ maxOutputTokens: "x" }).maxOutputTokens, 2048);
+});
+
+test("POST /api/claude forwards generation options to the model", async () => {
+  let seen;
+  const { srv, base } = await startServer(createHandler({ callModel: async (m, o) => { seen = o; return "ok"; } }));
+  try {
+    const res = await fetch(base + "/api/claude", { method: "POST", body: JSON.stringify({ messages: [], json: true, maxOutputTokens: 4000, temperature: 0.2 }) });
+    assert.equal(res.status, 200);
+    assert.deepEqual(seen, { maxOutputTokens: 4000, temperature: 0.2, json: true });
   } finally { srv.close(); }
 });
